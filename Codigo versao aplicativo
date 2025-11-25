@@ -1,0 +1,348 @@
+import customtkinter as ctk
+from tkinter import messagebox
+from abc import ABC, abstractmethod
+import random
+from datetime import datetime
+
+class Conta(ABC):
+    def __init__(self, nome, agencia, numero, senha, saldo=0.0): # type: ignore
+        self._nome = nome
+        self._agencia = agencia
+        self._numero = numero
+        self._senha = senha
+        self._saldo = saldo
+        self._extrato = []
+
+    @property
+    def nome(self): return self._nome
+    @property
+    def numero(self): return self._numero
+    @property
+    def saldo(self): return self._saldo # type: ignore
+
+    def verificar_senha(self, senha): # type: ignore
+        return self._senha == senha # type: ignore
+
+    def depositar(self, valor): # type: ignore
+        if valor > 0:
+            self._saldo += valor # type: ignore
+            data = datetime.now().strftime("%H:%M")
+            self._extrato.append(f"[{data}] Depósito: + R$ {valor:.2f}") # type: ignore
+            return True, "Depósito realizado com sucesso!"
+        return False, "Valor deve ser positivo."
+
+    @abstractmethod
+    def sacar(self, valor, senha): # type: ignore
+        pass
+
+    def transferir(self, valor, conta_destino, senha): # type: ignore
+        sucesso, msg = self.sacar(valor, senha) # type: ignore
+        if sucesso:
+            conta_destino.depositar(valor) # type: ignore
+            # Ajustando o texto do extrato para ficar mais detalhado
+            data = datetime.now().strftime("%H:%M")
+            self._extrato[-1] = f"[{data}] Transf. enviada p/ {conta_destino.nome}: - R$ {valor:.2f}" # type: ignore
+            conta_destino._extrato[-1] = f"[{data}] Transf. recebida de {self.nome}: + R$ {valor:.2f}" # type: ignore
+            return True, "Transferência realizada!"
+        return False, msg # type: ignore
+
+class ContaCorrente(Conta):
+    def __init__(self, nome, agencia, numero, senha, saldo=0.0, limite=1000.0): # type: ignore
+        super().__init__(nome, agencia, numero, senha, saldo) # type: ignore
+        self._limite = limite
+        self.tipo = "Corrente"
+
+    def sacar(self, valor, senha): # type: ignore
+        if not self.verificar_senha(senha): return False, "Senha incorreta." # type: ignore
+        if valor <= 0: return False, "Valor inválido."
+        
+        if valor > (self._saldo + self._limite): # type: ignore
+            return False, "Saldo insuficiente."
+        
+        self._saldo -= valor # type: ignore
+        data = datetime.now().strftime("%H:%M")
+        self._extrato.append(f"[{data}] Saque (CC): - R$ {valor:.2f}") # type: ignore
+        return True, "Saque realizado."
+
+class ContaPoupanca(Conta):
+    def __init__(self, nome, agencia, numero, senha, saldo=0.0): # type: ignore
+        super().__init__(nome, agencia, numero, senha, saldo) # type: ignore
+        self.tipo = "Poupança"
+
+    def sacar(self, valor, senha): # type: ignore
+        if not self.verificar_senha(senha): return False, "Senha incorreta." # type: ignore
+        if valor <= 0: return False, "Valor inválido."
+
+        if valor > self._saldo: # type: ignore
+            return False, "Saldo insuficiente (Poupança)."
+        
+        self._saldo -= valor # type: ignore
+        data = datetime.now().strftime("%H:%M")
+        self._extrato.append(f"[{data}] Saque (CP): - R$ {valor:.2f}") # type: ignore
+        return True, "Saque realizado."
+
+class GerenciadorBanco:
+    _instance = None
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(GerenciadorBanco, cls).__new__(cls)
+            cls._instance.contas = [] # type: ignore
+        return cls._instance
+
+    def gerar_numero_unico(self):
+        while True:
+            candidato = str(random.randint(10000, 99999))
+            if not self.buscar_conta(candidato): return candidato # type: ignore
+
+    def adicionar_conta(self, conta): # pyright: ignore[reportMissingParameterType, reportUnknownParameterType]
+        self.contas.append(conta) # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+
+    def buscar_conta(self, numero): # type: ignore
+        for c in self.contas: # type: ignore
+            if c.numero == numero: return c # type: ignore
+        return None
+
+class ContaFactory:
+    @staticmethod
+    def criar_conta(tipo, nome, agencia, senha): # type: ignore
+        gerenciador = GerenciadorBanco()
+        numero = gerenciador.gerar_numero_unico()
+        if tipo == "1": return ContaCorrente(nome, agencia, numero, senha) # type: ignore
+        elif tipo == "2": return ContaPoupanca(nome, agencia, numero, senha) # type: ignore
+        return None
+
+ctk.set_appearance_mode("Dark")  # type: ignore # Modos: "System", "Dark", "Light"
+ctk.set_default_color_theme("blue") # type: ignore
+
+class BankApp(ctk.CTk): # type: ignore
+    def __init__(self):
+        super().__init__() # pyright: ignore[reportUnknownMemberType]
+        self.title("Simulador Bancário POO") # type: ignore
+        self.geometry("400x600") # pyright: ignore[reportUnknownMemberType]
+        self.gerenciador = GerenciadorBanco()
+        self.usuario_atual = None
+        
+        # Iniciar tela de Login
+        self.show_login()
+
+    def clear_screen(self):
+        for widget in self.winfo_children(): # type: ignore
+            widget.destroy() # type: ignore
+
+    def show_login(self):
+        self.clear_screen()
+        
+        frame = ctk.CTkFrame(self) # type: ignore
+        frame.pack(pady=20, padx=20, fill="both", expand=True) # type: ignore
+
+        ctk.CTkLabel(frame, text="🏛️ Bem-vindo ao Banco", font=("Arial", 24, "bold")).pack(pady=30) # type: ignore
+
+        self.entry_conta = ctk.CTkEntry(frame, placeholder_text="Número da Conta") # type: ignore
+        self.entry_conta.pack(pady=10, padx=20, fill="x") # type: ignore
+
+        self.entry_senha = ctk.CTkEntry(frame, placeholder_text="Senha", show="*") # type: ignore
+        self.entry_senha.pack(pady=10, padx=20, fill="x") # type: ignore
+
+        ctk.CTkButton(frame, text="Entrar", command=self.login, height=40).pack(pady=20, padx=20, fill="x") # type: ignore
+        
+        ctk.CTkLabel(frame, text="Não tem conta?").pack(pady=5) # type: ignore
+        ctk.CTkButton(frame, text="Criar Nova Conta", command=self.show_register, fg_color="transparent", border_width=1).pack(pady=5) # type: ignore
+
+    def login(self):
+        num = self.entry_conta.get() # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+        senha = self.entry_senha.get() # type: ignore
+        conta = self.gerenciador.buscar_conta(num) # type: ignore
+        
+        if conta and conta.verificar_senha(senha): # type: ignore
+            self.usuario_atual = conta # type: ignore
+            self.show_dashboard()
+        else:
+            messagebox.showerror("Erro", "Conta não encontrada ou senha incorreta.")
+
+    def show_register(self):
+        self.clear_screen()
+        
+        frame = ctk.CTkFrame(self) # type: ignore
+        frame.pack(pady=20, padx=20, fill="both", expand=True) # type: ignore
+
+        ctk.CTkLabel(frame, text="📝 Nova Conta", font=("Arial", 20, "bold")).pack(pady=20) # type: ignore
+
+        self.reg_nome = ctk.CTkEntry(frame, placeholder_text="Nome Completo") # type: ignore
+        self.reg_nome.pack(pady=10, padx=20, fill="x") # type: ignore
+
+        self.reg_tipo = ctk.StringVar(value="1") # type: ignore
+        ctk.CTkRadioButton(frame, text="Conta Corrente (Com Limite)", variable=self.reg_tipo, value="1").pack(pady=5) # type: ignore
+        ctk.CTkRadioButton(frame, text="Conta Poupança", variable=self.reg_tipo, value="2").pack(pady=5) # type: ignore
+
+        self.reg_senha = ctk.CTkEntry(frame, placeholder_text="Criar Senha", show="*") # type: ignore
+        self.reg_senha.pack(pady=20, padx=20, fill="x") # type: ignore
+
+        ctk.CTkButton(frame, text="Confirmar Criação", command=self.register, fg_color="green", hover_color="darkgreen").pack(pady=10, padx=20, fill="x") # type: ignore
+        ctk.CTkButton(frame, text="Voltar", command=self.show_login, fg_color="gray").pack(pady=5, padx=20, fill="x") # type: ignore
+
+    def register(self):
+        nome = self.reg_nome.get() # type: ignore
+        senha = self.reg_senha.get() # type: ignore
+        tipo = self.reg_tipo.get() # type: ignore
+
+        if not nome or not senha:
+            messagebox.showwarning("Atenção", "Preencha todos os campos.")
+            return
+
+        nova_conta = ContaFactory.criar_conta(tipo, nome, "001", senha) # type: ignore
+        
+        if nova_conta:
+            # Bônus inicial
+            bonus = 1000 if tipo == "1" else 500
+            nova_conta.depositar(bonus) # type: ignore
+            
+            self.gerenciador.adicionar_conta(nova_conta) # type: ignore
+            messagebox.showinfo("Sucesso", f"Conta Criada!\nNúmero da Conta: {nova_conta.numero}\n(Anote este número!)")
+            self.show_login()
+        else:
+            messagebox.showerror("Erro", "Falha ao criar conta.")
+
+    
+    def show_dashboard(self):
+        self.clear_screen()
+        
+        
+        header = ctk.CTkFrame(self, fg_color="#1e3a8a", corner_radius=0) # type: ignore
+        header.pack(fill="x", ipady=15) # type: ignore
+        
+        ctk.CTkLabel(header, text=f"Olá, {self.usuario_atual.nome}", font=("Arial", 14), text_color="white").pack() # type: ignore
+        self.lbl_saldo = ctk.CTkLabel(header, text=f"R$ {self.usuario_atual.saldo:.2f}", font=("Arial", 28, "bold"), text_color="white") # type: ignore
+        self.lbl_saldo.pack() # type: ignore
+        ctk.CTkLabel(header, text=f"Conta {self.usuario_atual.tipo}: {self.usuario_atual.numero}", font=("Arial", 12), text_color="#bfdbfe").pack() # type: ignore
+
+        
+        actions = ctk.CTkFrame(self, fg_color="transparent") # type: ignore
+        actions.pack(pady=10, padx=10, fill="x") # type: ignore
+
+        btn_grid_config = {"padx": 5, "pady": 5}
+        
+        ctk.CTkButton(actions, text="➕ Depositar", command=self.popup_depositar, width=110, fg_color="green").grid(row=0, column=0, **btn_grid_config) # type: ignore
+        ctk.CTkButton(actions, text="➖ Sacar", command=self.popup_sacar, width=110, fg_color="#b91c1c").grid(row=0, column=1, **btn_grid_config) # type: ignore
+        ctk.CTkButton(actions, text="💸 Transferir", command=self.popup_transferir, width=110).grid(row=0, column=2, **btn_grid_config) # type: ignore
+
+       
+        ctk.CTkLabel(self, text="Extrato Recente", font=("Arial", 14, "bold"), anchor="w").pack(padx=20, pady=(10,0), fill="x") # type: ignore
+        
+        self.scroll_extrato = ctk.CTkScrollableFrame(self, height=200) # type: ignore
+        self.scroll_extrato.pack(padx=20, pady=5, fill="both", expand=True) # type: ignore
+        self.atualizar_lista_extrato()
+
+        
+        ctk.CTkButton(self, text="Sair / Logout", command=self.show_login, fg_color="gray", height=30).pack(pady=10, padx=20, fill="x") # type: ignore
+
+    def atualizar_lista_extrato(self):
+        
+        for widget in self.scroll_extrato.winfo_children(): # type: ignore
+            widget.destroy() # type: ignore
+            
+        extrato_reverso = self.usuario_atual._extrato[::-1] # type: ignore # Do mais novo pro mais antigo
+        
+        if not extrato_reverso:
+            ctk.CTkLabel(self.scroll_extrato, text="Nenhuma movimentação.").pack() # type: ignore
+            
+        for item in extrato_reverso: # type: ignore
+            frame_item = ctk.CTkFrame(self.scroll_extrato, fg_color="#333333") # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue, reportUnknownMemberType]
+            frame_item.pack(fill="x", pady=2) # type: ignore
+            
+           
+            cor = "lightgreen" if "Depósito" in item or "recebida" in item else "#ff9999"
+            ctk.CTkLabel(frame_item, text=item, text_color=cor, anchor="w").pack(padx=10, pady=5, fill="x") # type: ignore
+
+    def refresh_ui(self):
+       
+        self.lbl_saldo.configure(text=f"R$ {self.usuario_atual.saldo:.2f}") # pyright: ignore[reportOptionalMemberAccess, reportUnknownMemberType]
+        self.atualizar_lista_extrato()
+
+    
+    def popup_depositar(self):
+        dialog = ctk.CTkInputDialog(text="Valor do Depósito:", title="Depositar") # type: ignore
+        valor_str = dialog.get_input() # type: ignore
+        if valor_str:
+            try:
+                sucesso, msg = self.usuario_atual.depositar(float(valor_str)) # type: ignore
+                if sucesso: 
+                    messagebox.showinfo("Sucesso", msg) # type: ignore
+                    self.refresh_ui()
+                else: messagebox.showerror("Erro", msg) # type: ignore
+            except ValueError: messagebox.showerror("Erro", "Valor inválido")
+
+    def popup_sacar(self):
+        
+        top = ctk.CTkToplevel(self) # type: ignore
+        top.title("Realizar Saque") # pyright: ignore[reportUnknownMemberType]
+        top.geometry("300x250") # type: ignore
+        top.attributes("-topmost", True)  # type: ignore
+        ctk.CTkLabel(top, text="Valor:").pack(pady=5) # type: ignore
+        entry_val = ctk.CTkEntry(top) # type: ignore
+        entry_val.pack(pady=5) # pyright: ignore[reportUnknownMemberType]
+        
+        ctk.CTkLabel(top, text="Senha:").pack(pady=5) # type: ignore
+        entry_pass = ctk.CTkEntry(top, show="*") # type: ignore
+        entry_pass.pack(pady=5) # type: ignore
+        
+        def confirmar():
+            try:
+                val = float(entry_val.get()) # type: ignore
+                pwd = entry_pass.get() # type: ignore
+                sucesso, msg = self.usuario_atual.sacar(val, pwd) # type: ignore
+                if sucesso:
+                    messagebox.showinfo("Sucesso", msg) # type: ignore
+                    self.refresh_ui()
+                    top.destroy() # type: ignore
+                else:
+                    messagebox.showerror("Erro", msg) # type: ignore
+            except ValueError:
+                messagebox.showerror("Erro", "Valor inválido")
+
+        ctk.CTkButton(top, text="Confirmar", command=confirmar, fg_color="#b91c1c").pack(pady=20) # type: ignore
+
+    def popup_transferir(self):
+        top = ctk.CTkToplevel(self) # type: ignore
+        top.title("Transferência") # type: ignore
+        top.geometry("300x350") # type: ignore
+        top.attributes("-topmost", True) # type: ignore
+
+        ctk.CTkLabel(top, text="Conta Destino:").pack(pady=5) # type: ignore
+        entry_dest = ctk.CTkEntry(top) # type: ignore
+        entry_dest.pack(pady=5) # type: ignore
+
+        ctk.CTkLabel(top, text="Valor:").pack(pady=5) # type: ignore
+        entry_val = ctk.CTkEntry(top) # type: ignore
+        entry_val.pack(pady=5) # type: ignore
+        
+        ctk.CTkLabel(top, text="Sua Senha:").pack(pady=5) # type: ignore
+        entry_pass = ctk.CTkEntry(top, show="*") # type: ignore
+        entry_pass.pack(pady=5) # type: ignore
+
+        def confirmar():
+            try:
+                dest_num = entry_dest.get() # type: ignore
+                conta_dest = self.gerenciador.buscar_conta(dest_num) # type: ignore
+                
+                if not conta_dest:
+                    messagebox.showerror("Erro", "Conta destino não encontrada.")
+                    return
+
+                val = float(entry_val.get()) # type: ignore
+                pwd = entry_pass.get() # type: ignore
+                
+                sucesso, msg = self.usuario_atual.transferir(val, conta_dest, pwd) # type: ignore
+                if sucesso:
+                    messagebox.showinfo("Sucesso", msg) # type: ignore
+                    self.refresh_ui()
+                    top.destroy() # type: ignore
+                else:
+                    messagebox.showerror("Erro", msg) # pyright: ignore[reportUnknownArgumentType]
+            except ValueError:
+                messagebox.showerror("Erro", "Valor inválido")
+
+        ctk.CTkButton(top, text="Enviar PIX/TED", command=confirmar).pack(pady=20) # type: ignore
+
+if __name__ == "__main__":
+    app = BankApp()
+    app.mainloop() # pyright: ignore[reportUnknownMemberType]
